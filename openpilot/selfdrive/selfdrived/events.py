@@ -129,7 +129,8 @@ def comm_issue_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaste
 
 
 def camera_malfunction_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  all_cams = ('narrowRoadCameraState', 'cabinCameraState', 'wideRoadCameraState')
+  # SP-FORK (m3-nodm-sp): cabinCameraState excluded — dmonitoringd/dmonitoringmodeld are disabled, cabin camera is unused
+  all_cams = ('narrowRoadCameraState', 'wideRoadCameraState')
   bad_cams = [s.replace('State', '') for s in all_cams if s in sm.data.keys() and not sm.all_checks([s, ])]
   return NormalPermanentAlert("Camera Malfunction", ', '.join(bad_cams))
 
