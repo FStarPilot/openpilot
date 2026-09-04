@@ -45,7 +45,8 @@ class Controls(ControlsExt):
 
     self.sm = messaging.SubMaster(['lateralDelay', 'vehicleParameters', 'lateralTorqueParameters', 'modelV2', 'selfdriveState',
                                    'extrinsicsCalibration', 'deviceMotion', 'longitudinalPlan', 'lateralManeuverPlan', 'carState', 'carOutput',
-                                   'driverMonitoringState', 'onroadEvents', 'driverAssistance'] + self.sm_services_ext,
+                                   # SP-FORK (m3-nodm-sp): driverMonitoringState removed — dmonitoringd disabled
+                                   'onroadEvents', 'driverAssistance'] + self.sm_services_ext,
                                   poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState'] + self.pm_services_ext)
 
@@ -219,7 +220,9 @@ class Controls(ControlsExt):
     cs.upAccelCmd = float(self.LoC.pid.p)
     cs.uiAccelCmd = float(self.LoC.pid.i)
     cs.ufAccelCmd = float(self.LoC.pid.f)
-    cs.forceDecel = bool(self.sm['driverMonitoringState'].noResponseForceDecel or
+    cs.forceDecel = bool(
+                         # SP-FORK (m3-nodm-sp): DM disabled, noResponseForceDecel always False
+                         False or
                          (self.sm['selfdriveState'].state == State.softDisabling))
 
     # trigger the car's stock driver monitoring escalation
