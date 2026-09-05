@@ -23,6 +23,14 @@ the cherry-pick succeeds. A conflict leaves an existing branch unchanged (or a
 missing branch uncreated), lists conflicting files, and fails its Actions job.
 Other branches continue independently. `master` is never synchronized or patched.
 
+The inherited `Debug Discourse Posting` and `Sync comma's LFS` workflows belong to
+upstream infrastructure: they publish forum messages and upload to upstream's
+GitLab LFS mirror. They are restricted to `sunnypilot/sunnypilot` on `master` and
+disabled in this fork's Actions settings. Keep them disabled when updating the
+managed branches, which intentionally retain upstream workflow files unchanged.
+Neither workflow is required for this branch synchronization or for downloading
+LFS assets during development.
+
 Commit generation is deterministic: repeating the same upstream and pinned patch
 does not add commits or push updates. Submodules and LFS assets are not downloaded;
 only files touched by the patch are checked out.
