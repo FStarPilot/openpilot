@@ -1,43 +1,51 @@
-# Upstream branch synchronization
+# Development branch synchronization
 
-This workflow preserves the upstream code and safety features. It does not apply
-custom commits. The driver-monitoring removal commit requested alongside this
-workflow is intentionally not included.
+`master` hosts the controller workflow. Every six hours it checks upstream
+`dev-chestnut`, `dev`, `staging-chestnut`, and `staging`, then rebuilds each matching
+fork branch from its upstream tip plus this pinned commit:
 
-Merge the workflow and script into `master` to enable the schedule. The workflow
-checks `dev-chestnut`, `dev`, `staging-chestnut`, and `staging` every six hours at
-00:17, 06:17, 12:17, and 18:17 UTC (08:17, 14:17, 20:17, and 02:17 in Taiwan).
-GitHub can delay scheduled runs during high load.
+https://github.com/chiachunli08/openpilot/commit/f08c7d88f847ec0878ed6ec524663784258ed32f
 
-Missing branches are created from the upstream SHA. Existing branches are
-fast-forwarded only; divergent histories, upstream force pushes, missing upstream
-branches, and API failures fail the corresponding job. No branch is force-pushed.
-One failure does not cancel the other branch jobs. The workflow never changes
-`master`, so branch synchronization does not remove its scheduling entry point.
+The patch is for the owner's development machine and disables driver monitoring.
+The workflow applies it exactly with `git cherry-pick -x`; it does not attempt
+automatic conflict resolution. If upstream already contains the changes, Git
+drops the empty cherry-pick. Successful text application is not a driving validation.
 
-Use **Actions > Sync sunnypilot upstream > Run workflow** on `master` to check
-manually. Dry run is enabled by default; uncheck it to update branches.
+The schedule runs at 00:17, 06:17, 12:17, and 18:17 UTC (08:17, 14:17, 20:17, and
+02:17 in Taiwan). GitHub can delay scheduled runs during high load.
+
+The four destination branches are automation-managed. Each successful run replaces
+the previous upstream-plus-patch history, including after upstream history rewrites.
+Keep additional manual work on other branches. Updates use an explicit
+`--force-with-lease` against the SHA read at the start, so concurrent changes fail
+instead of being overwritten. Missing destination branches are created only after
+the cherry-pick succeeds. A conflict leaves an existing branch unchanged (or a
+missing branch uncreated), lists conflicting files, and fails its Actions job.
+Other branches continue independently. `master` is never synchronized or patched.
+
+Commit generation is deterministic: repeating the same upstream and pinned patch
+does not add commits or push updates. Submodules and LFS assets are not downloaded;
+only files touched by the patch are checked out.
+
+Use **Actions > Sync sunnypilot upstream with development patch > Run workflow**
+on `master` for a manual run. Dry run defaults to enabled and tests the actual
+cherry-pick without pushing. Uncheck it to synchronize branches.
 
 The workflow uses `GITHUB_TOKEN` with `contents: write` by default. If GitHub
-rejects updates involving `.github/workflows`, add a repository Actions secret
-named `SYNC_TOKEN`: a fine-grained token scoped only to this repository with
-**Contents: read/write** and **Workflows: read/write**. Branch rules can also
-prevent updates. Never put the token in a file or workflow source. A custom token
-may trigger workflows present on the synchronized branches; review those workflows
-before enabling that token.
+rejects updates involving `.github/workflows`, a repository secret `SYNC_TOKEN`
+can provide a token scoped to this repository with **Contents: read/write** and
+**Workflows: read/write**. Branch rules can also prevent updates. A custom token
+may trigger upstream workflows on branch pushes. Never store tokens in source.
 
-Failures appear in Actions with the branch name and API error. To receive native
-failure notifications, enable Actions email/web notifications and **failed
-workflows only** in your GitHub notification settings. Scheduled-run notifications
-go to the user who last changed the cron expression; manual-run notifications go
-to the triggering user. The workflow cannot override personal notification settings.
-
-GitHub can disable scheduled workflows in public repositories after 60 days of
-repository inactivity. Check the Actions page and re-enable the workflow if needed.
+Failures use native GitHub Actions notifications. Enable Actions email/web
+notifications and **failed workflows only** in your GitHub notification settings.
+Scheduled notifications go to the user who last changed the cron expression;
+manual notifications go to the triggering user. The workflow cannot override
+personal notification preferences. Public repositories can have scheduled
+workflows disabled after 60 days of repository inactivity.
 
 References:
 - https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
 - https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs
-- https://docs.github.com/en/rest/git/refs
 
 Local verification: `python3 -m unittest discover -s .github/scripts -p 'test_*.py'`.

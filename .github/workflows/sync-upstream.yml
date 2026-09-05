@@ -1,4 +1,4 @@
-name: Sync sunnypilot upstream
+name: Sync sunnypilot upstream with development patch
 
 on:
   schedule:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Check upstream without updating branches
+        description: Test upstream and cherry-pick without updating branches
         type: boolean
         default: true
 
@@ -22,7 +22,7 @@ jobs:
   sync:
     if: github.repository == 'FStarPilot/sunnypilot' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -33,6 +33,8 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: .github/scripts
+      - name: Test synchronization logic
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Synchronize branch
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
@@ -44,6 +46,6 @@ jobs:
         env:
           SYNC_BRANCH: ${{ matrix.branch }}
         run: |
-          echo "::error::Sync failed for $SYNC_BRANCH. Inspect the API error above; resolve divergence or token permissions before retrying."
+          echo "::error::Sync failed for $SYNC_BRANCH. Inspect the conflict or Git error above. The remote branch is only updated after a successful cherry-pick."
           echo "### Failed: $SYNC_BRANCH" >> "$GITHUB_STEP_SUMMARY"
           echo "Inspect the job log for the failure reason. Other branch jobs run independently." >> "$GITHUB_STEP_SUMMARY"
