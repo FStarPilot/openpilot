@@ -1,0 +1,51 @@
+name: Sync sunnypilot upstream with development patch
+
+on:
+  schedule:
+    # UTC 00:17, 06:17, 12:17, 18:17; avoid the busy start of each hour.
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Test upstream and cherry-pick without updating branches
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-sunnypilot-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'FStarPilot/sunnypilot' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [dev-chestnut, dev, staging-chestnut, staging]
+    name: Sync ${{ matrix.branch }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Test synchronization logic
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Synchronize branch
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+          SYNC_BRANCH: ${{ matrix.branch }}
+          SYNC_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: python3 .github/scripts/sync_upstream.py
+      - name: Report failure
+        if: failure()
+        env:
+          SYNC_BRANCH: ${{ matrix.branch }}
+        run: |
+          echo "::error::Sync failed for $SYNC_BRANCH. Inspect the conflict or Git error above. The remote branch is only updated after a successful cherry-pick."
+          echo "### Failed: $SYNC_BRANCH" >> "$GITHUB_STEP_SUMMARY"
+          echo "Inspect the job log for the failure reason. Other branch jobs run independently." >> "$GITHUB_STEP_SUMMARY"
