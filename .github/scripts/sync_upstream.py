@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 UPSTREAM = "https://github.com/sunnypilot/sunnypilot.git"
-TARGET = "https://github.com/FStarPilot/sunnypilot.git"
+TARGET = "https://github.com/FStarPilot/openpilot.git"
 PATCH_REPO = "https://github.com/chiachunli08/openpilot.git"
 PATCH_COMMIT = "f08c7d88f847ec0878ed6ec524663784258ed32f"
 BRANCHES = {"dev-chestnut", "dev", "staging-chestnut", "staging"}
