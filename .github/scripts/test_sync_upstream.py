@@ -91,6 +91,36 @@ class SyncTests(unittest.TestCase):
     self.assertIn('cherry-pick succeeded', self.synchronize(dry_run=True))
     self.assertIsNone(self.head())
 
+  def test_reviewed_cleanup_preserves_other_files_and_is_deterministic(self):
+    removed = {'.github/workflows/tests.yaml', '.github/workflows/post-to-discourse/action.yml',
+               '.github/labeler.yaml', '.github/release-drafter.yml'}
+    retained = {'.github/ISSUE_TEMPLATE/bug.yml', '.github/workflows/custom.yml'}
+    for name in sorted(removed | retained):
+      path = self.upstream / name
+      path.parent.mkdir(parents=True, exist_ok=True)
+      path.write_text('name: upstream configuration\n')
+    upstream_sha = self.commit(self.upstream, 'upstream automation')
+    self.assertIn('workflow cleanup complete', self.synchronize(dry_run=True))
+    self.assertIsNone(self.head())
+    self.synchronize()
+    first = self.head()
+    files = set(self.run_git('ls-tree', '-r', '--name-only', first, cwd=self.target).splitlines())
+    self.assertTrue(removed.isdisjoint(files))
+    self.assertTrue(retained.issubset(files))
+    self.assertIn('patched', self.run_git('show', first + ':code.txt', cwd=self.target))
+    self.assertEqual(removed, set(self.run_git('diff-tree', '--no-commit-id', '--name-only', '-r', first, cwd=self.target).splitlines()))
+    self.assertIn(self.patch_sha, self.run_git('show', '-s', '--format=%B', first + '^', cwd=self.target))
+    self.assertEqual(upstream_sha, self.run_git('rev-parse', first + '^^', cwd=self.target))
+    self.assertIn('already synchronized', self.synchronize())
+    self.assertEqual(first, self.head())
+    new_workflow = '.github/workflows/new.yaml'
+    (self.upstream / new_workflow).write_text('name: new upstream job\n')
+    self.commit(self.upstream, 'new upstream automation')
+    self.synchronize()
+    files = set(self.run_git('ls-tree', '-r', '--name-only', self.head(), cwd=self.target).splitlines())
+    self.assertIn(new_workflow, files)
+    self.assertTrue(removed.isdisjoint(files))
+
   def test_concurrent_branch_creation_rejected_by_lease(self):
     actual_git = git
     concurrent_sha = self.run_git('rev-parse', 'HEAD', cwd=self.upstream)
