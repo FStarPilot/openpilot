@@ -2,7 +2,8 @@
 
 `master` hosts the controller workflow. Every six hours it checks upstream
 `dev-chestnut`, `dev`, `staging-chestnut`, and `staging`, then rebuilds each matching
-fork branch from its upstream tip plus this pinned commit:
+fork branch from its upstream tip plus this pinned commit, followed by removal
+of the reviewed unused automation files:
 
 https://github.com/chiachunli08/openpilot/commit/f08c7d88f847ec0878ed6ec524663784258ed32f
 
@@ -23,13 +24,18 @@ the cherry-pick succeeds. A conflict leaves an existing branch unchanged (or a
 missing branch uncreated), lists conflicting files, and fails its Actions job.
 Other branches continue independently. `master` is never synchronized or patched.
 
-The inherited `Debug Discourse Posting` and `Sync comma's LFS` workflows belong to
-upstream infrastructure: they publish forum messages and upload to upstream's
-GitLab LFS mirror. They are restricted to `sunnypilot/sunnypilot` on `master` and
-disabled in this fork's Actions settings. Keep them disabled when updating the
-managed branches, which intentionally retain upstream workflow files unchanged.
-Neither workflow is required for this branch synchronization or for downloading
-LFS assets during development.
+Only `.github/workflows/sync-upstream.yml` remains on `master`. The 19 reviewed
+unused upstream workflows, their three composite actions, `.github/labeler.yaml`,
+and `.github/release-drafter.yml` have been deleted. Their previously registered
+workflows remain disabled in this fork's Actions settings.
+
+After cherry-picking, each managed branch removes only the exact 24 paths listed
+in `UNUSED_AUTOMATION_FILES` in `.github/scripts/sync_upstream.py`, with a separate
+deterministic cleanup commit. This prevents those files from returning on the
+next synchronization. New upstream workflow paths are preserved pending review.
+Issue templates and application code are preserved. No cleanup commit is added
+when none of the listed files exist. Both the patch and cleanup must succeed
+before the branch is pushed.
 
 Commit generation is deterministic: repeating the same upstream and pinned patch
 does not add commits or push updates. Submodules and LFS assets are not downloaded;
