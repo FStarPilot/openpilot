@@ -2,8 +2,14 @@
 
 `master` hosts the controller workflow. Every six hours it checks upstream
 `dev-chestnut`, `dev`, `staging-chestnut`, and `staging`, then rebuilds each matching
-fork branch from its upstream tip plus this pinned commit, followed by removal
-of the reviewed unused automation files:
+fork branch in this order:
+
+1. Start at the upstream tip.
+2. Cherry-pick the pinned driver-monitoring patch.
+3. Create a separate `system: disable comma uploader` commit.
+4. Remove the reviewed unused automation files in a cleanup commit when needed.
+
+The pinned driver-monitoring commit is:
 
 https://github.com/chiachunli08/openpilot/commit/f08c7d88f847ec0878ed6ec524663784258ed32f
 
@@ -11,6 +17,14 @@ The patch is for the owner's development machine and disables driver monitoring.
 The workflow applies it exactly with `git cherry-pick -x`; it does not attempt
 automatic conflict resolution. If upstream already contains the changes, Git
 drops the empty cherry-pick. Successful text application is not a driving validation.
+
+The comma uploader commit changes the `uploader` process in
+`openpilot/system/manager/process_config.py` to `enabled=False`. This disables only
+the comma uploader process; it does not disable loggerd, local log retention,
+sunnylink uploader, or other network services. The workflow requires the expected
+process definition to occur exactly once. If upstream changes that definition,
+synchronization fails before pushing instead of silently leaving the uploader on.
+If upstream already has the exact disabled definition, no redundant commit is added.
 
 The schedule runs at 00:17, 06:17, 12:17, and 18:17 UTC (08:17, 14:17, 20:17, and
 02:17 in Taiwan). GitHub can delay scheduled runs during high load.
@@ -29,13 +43,13 @@ unused upstream workflows, their three composite actions, `.github/labeler.yaml`
 and `.github/release-drafter.yml` have been deleted. Their previously registered
 workflows remain disabled in this fork's Actions settings.
 
-After cherry-picking, each managed branch removes only the exact 24 paths listed
-in `UNUSED_AUTOMATION_FILES` in `.github/scripts/sync_upstream.py`, with a separate
-deterministic cleanup commit. This prevents those files from returning on the
-next synchronization. New upstream workflow paths are preserved pending review.
-Issue templates and application code are preserved. No cleanup commit is added
-when none of the listed files exist. Both the patch and cleanup must succeed
-before the branch is pushed.
+After cherry-picking and disabling the comma uploader, each managed branch removes
+only the exact 24 paths listed in `UNUSED_AUTOMATION_FILES` in
+`.github/scripts/sync_upstream.py`, with a separate deterministic cleanup commit.
+This prevents those files from returning on the next synchronization. New upstream
+workflow paths are preserved pending review. Issue templates and application code
+are preserved. No cleanup commit is added when none of the listed files exist. The
+nodm patch, uploader change, and cleanup must all succeed before the branch is pushed.
 
 Commit generation is deterministic: repeating the same upstream and pinned patch
 does not add commits or push updates. Submodules and LFS assets are not downloaded;

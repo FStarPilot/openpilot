@@ -1,4 +1,4 @@
-"""Rebuild development branches with the pinned patch and reviewed workflow cleanup."""
+"""Rebuild development branches with nodm, no comma uploader, and workflow cleanup."""
 
 import base64
 import os
@@ -11,6 +11,9 @@ TARGET = "https://github.com/FStarPilot/openpilot.git"
 PATCH_REPO = "https://github.com/chiachunli08/openpilot.git"
 PATCH_COMMIT = "f08c7d88f847ec0878ed6ec524663784258ed32f"
 BRANCHES = {"dev-chestnut", "dev", "staging-chestnut", "staging"}
+UPLOADER_PROCESS_CONFIG = "openpilot/system/manager/process_config.py"
+COMMA_UPLOADER_ENABLED = '  PythonProcess("uploader", "openpilot.system.loggerd.uploader", uploader_ready),'
+COMMA_UPLOADER_DISABLED = '  PythonProcess("uploader", "openpilot.system.loggerd.uploader", uploader_ready, enabled=False),'
 # Explicitly reviewed unused files. New upstream workflow paths are preserved.
 UNUSED_AUTOMATION_FILES = (
   ".github/labeler.yaml",
@@ -57,6 +60,19 @@ def remote_head(repo, branch, env):
   return result.stdout.split()[0]
 
 
+def disable_comma_uploader(directory):
+  path = Path(directory) / UPLOADER_PROCESS_CONFIG
+  contents = path.read_text()
+  enabled_count = contents.count(COMMA_UPLOADER_ENABLED)
+  disabled_count = contents.count(COMMA_UPLOADER_DISABLED)
+  if enabled_count == 0 and disabled_count == 1:
+    return False
+  if enabled_count != 1 or disabled_count != 0:
+    raise RuntimeError(f"Unable to find the expected comma uploader process in {UPLOADER_PROCESS_CONFIG}")
+  path.write_text(contents.replace(COMMA_UPLOADER_ENABLED, COMMA_UPLOADER_DISABLED))
+  return True
+
+
 def sync(branch, dry_run=False, *, upstream=UPSTREAM, target=TARGET,
          patch_repo=PATCH_REPO, patch_commit=PATCH_COMMIT):
   if branch not in BRANCHES:
@@ -96,7 +112,8 @@ def sync(branch, dry_run=False, *, upstream=UPSTREAM, target=TARGET,
     blobs = {sha for change in changes.splitlines() for sha in change.split()[2:4] if set(sha) != {"0"}}
     run("cat-file", "--batch", stdin_text="\n".join(sorted(blobs)) + "\n")
     run("fetch", "--quiet", "--no-tags", "--filter=blob:none", "upstream", upstream_sha)
-    run("sparse-checkout", "set", "--no-cone", "--stdin", stdin_text=paths)
+    sparse_paths = set(paths.splitlines()) | {UPLOADER_PROCESS_CONFIG}
+    run("sparse-checkout", "set", "--no-cone", "--stdin", stdin_text="\n".join(sorted(sparse_paths)) + "\n")
     run("checkout", "--quiet", "--detach", upstream_sha)
     # Identical upstream + patch yields an identical commit on every run.
     env["GIT_COMMITTER_DATE"] = run("show", "-s", "--format=%cI", upstream_sha).stdout.strip()
@@ -105,6 +122,10 @@ def sync(branch, dry_run=False, *, upstream=UPSTREAM, target=TARGET,
       conflicts = run("diff", "--name-only", "--diff-filter=U").stdout.strip()
       run("cherry-pick", "--abort", check=False)
       raise RuntimeError(f"{branch}: cherry-pick failed; remote unchanged. Conflicts: {conflicts or picked.stdout.strip()}")
+    if disable_comma_uploader(directory):
+      run("add", "--", UPLOADER_PROCESS_CONFIG)
+      env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"]
+      run("commit", "--quiet", "-m", "system: disable comma uploader")
     # Remove only the reviewed files, without recursively deleting directories.
     run("rm", "--quiet", "--sparse", "--ignore-unmatch", "--", *UNUSED_AUTOMATION_FILES)
     staged = run("diff", "--cached", "--quiet", check=False)
@@ -117,12 +138,12 @@ def sync(branch, dry_run=False, *, upstream=UPSTREAM, target=TARGET,
     if new_sha == previous_sha:
       return f"{branch}: already synchronized at {new_sha}"
     if dry_run:
-      return f"{branch}: cherry-pick succeeded; workflow cleanup complete; would update to {new_sha} (upstream {upstream_sha})"
+      return f"{branch}: cherry-pick succeeded; comma uploader disabled; workflow cleanup complete; would update to {new_sha} (upstream {upstream_sha})"
     # These four branches are managed mirrors. Rebuilding replaces the previous patch commit.
     # An explicit lease also protects first creation if another actor creates the branch meanwhile.
     run("push", "--porcelain", f"--force-with-lease=refs/heads/{branch}:{previous_sha or ''}",
         "origin", f"HEAD:refs/heads/{branch}")
-    return f"{branch}: synchronized to {new_sha} (upstream {upstream_sha}, patch {patch_commit})"
+    return f"{branch}: synchronized to {new_sha} (upstream {upstream_sha}, patch {patch_commit}, comma uploader disabled)"
 
 
 if __name__ == "__main__":

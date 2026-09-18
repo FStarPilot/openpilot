@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from sync_upstream import git, remote_head, sync
+from sync_upstream import (COMMA_UPLOADER_DISABLED, COMMA_UPLOADER_ENABLED,
+                           UPLOADER_PROCESS_CONFIG, git, remote_head, sync)
 
 
 class SyncTests(unittest.TestCase):
@@ -23,6 +24,9 @@ class SyncTests(unittest.TestCase):
     self.run_git('config', 'commit.gpgSign', 'false', cwd=self.upstream)
     self.original = ''.join(f'line {i}\n' for i in range(40))
     (self.upstream / 'code.txt').write_text(self.original)
+    process_config = self.upstream / UPLOADER_PROCESS_CONFIG
+    process_config.parent.mkdir(parents=True)
+    process_config.write_text(COMMA_UPLOADER_ENABLED + '\n')
     self.commit(self.upstream, 'base')
     self.run_git('clone', '-q', '--no-hardlinks', str(self.upstream), str(self.patch_repo))
     self.run_git('config', 'user.name', 'Sync Test', cwd=self.patch_repo)
@@ -52,17 +56,21 @@ class SyncTests(unittest.TestCase):
   def test_create_and_repeat_are_deterministic(self):
     self.synchronize()
     first = self.head()
-    self.assertIn('(cherry picked from commit ' + self.patch_sha + ')', self.run_git('show', '-s', '--format=%B', first, cwd=self.target))
+    self.assertEqual('system: disable comma uploader', self.run_git('show', '-s', '--format=%s', first, cwd=self.target))
+    self.assertIn('(cherry picked from commit ' + self.patch_sha + ')',
+                  self.run_git('show', '-s', '--format=%B', first + '^', cwd=self.target))
     self.assertIn('already synchronized', self.synchronize())
     self.assertEqual(first, self.head())
     self.assertIn('patched', self.run_git('show', first + ':code.txt', cwd=self.target))
+    self.assertEqual(COMMA_UPLOADER_DISABLED.strip(),
+                     self.run_git('show', first + ':' + UPLOADER_PROCESS_CONFIG, cwd=self.target))
 
   def test_upstream_update_rebuilds_patch(self):
     self.synchronize()
     (self.upstream / 'other.txt').write_text('new upstream file\n')
     upstream_sha = self.commit(self.upstream, 'upstream update')
     self.synchronize()
-    self.assertEqual(upstream_sha, self.run_git('rev-parse', self.head() + '^', cwd=self.target))
+    self.assertEqual(upstream_sha, self.run_git('rev-parse', self.head() + '^^', cwd=self.target))
     self.assertEqual('new upstream file', self.run_git('show', self.head() + ':other.txt', cwd=self.target))
 
   def test_conflict_preserves_previous_branch(self):
@@ -85,7 +93,9 @@ class SyncTests(unittest.TestCase):
     (self.upstream / 'code.txt').write_text(self.original.replace('line 10\n', 'patched\n'))
     upstream_sha = self.commit(self.upstream, 'upstream includes patch')
     self.synchronize()
-    self.assertEqual(upstream_sha, self.head())
+    self.assertEqual(upstream_sha, self.run_git('rev-parse', self.head() + '^', cwd=self.target))
+    self.assertEqual('system: disable comma uploader',
+                     self.run_git('show', '-s', '--format=%s', self.head(), cwd=self.target))
 
   def test_dry_run_tests_patch_without_writing(self):
     self.assertIn('cherry-pick succeeded', self.synchronize(dry_run=True))
@@ -109,8 +119,10 @@ class SyncTests(unittest.TestCase):
     self.assertTrue(retained.issubset(files))
     self.assertIn('patched', self.run_git('show', first + ':code.txt', cwd=self.target))
     self.assertEqual(removed, set(self.run_git('diff-tree', '--no-commit-id', '--name-only', '-r', first, cwd=self.target).splitlines()))
-    self.assertIn(self.patch_sha, self.run_git('show', '-s', '--format=%B', first + '^', cwd=self.target))
-    self.assertEqual(upstream_sha, self.run_git('rev-parse', first + '^^', cwd=self.target))
+    self.assertEqual('system: disable comma uploader',
+                     self.run_git('show', '-s', '--format=%s', first + '^', cwd=self.target))
+    self.assertIn(self.patch_sha, self.run_git('show', '-s', '--format=%B', first + '^^', cwd=self.target))
+    self.assertEqual(upstream_sha, self.run_git('rev-parse', first + '^^^', cwd=self.target))
     self.assertIn('already synchronized', self.synchronize())
     self.assertEqual(first, self.head())
     new_workflow = '.github/workflows/new.yaml'
@@ -120,6 +132,24 @@ class SyncTests(unittest.TestCase):
     files = set(self.run_git('ls-tree', '-r', '--name-only', self.head(), cwd=self.target).splitlines())
     self.assertIn(new_workflow, files)
     self.assertTrue(removed.isdisjoint(files))
+
+  def test_uploader_already_disabled_is_not_recommitted(self):
+    process_config = self.upstream / UPLOADER_PROCESS_CONFIG
+    process_config.write_text(COMMA_UPLOADER_DISABLED + '\n')
+    upstream_sha = self.commit(self.upstream, 'upstream disables uploader')
+    self.synchronize()
+    self.assertEqual(upstream_sha, self.run_git('rev-parse', self.head() + '^', cwd=self.target))
+    self.assertIn(self.patch_sha, self.run_git('show', '-s', '--format=%B', self.head(), cwd=self.target))
+
+  def test_changed_uploader_definition_preserves_previous_branch(self):
+    self.synchronize()
+    previous = self.head()
+    process_config = self.upstream / UPLOADER_PROCESS_CONFIG
+    process_config.write_text('PythonProcess("uploader", "changed")\n')
+    self.commit(self.upstream, 'change uploader definition')
+    with self.assertRaisesRegex(RuntimeError, 'expected comma uploader process'):
+      self.synchronize()
+    self.assertEqual(previous, self.head())
 
   def test_concurrent_branch_creation_rejected_by_lease(self):
     actual_git = git
