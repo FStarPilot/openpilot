@@ -13,6 +13,9 @@ The pinned nodm commit is:
 
 https://github.com/chiachunli08/openpilot/commit/f0bf8a375cabd2515bb332034749992e076acb7c
 
+The commit is kept reachable by the `pin-hkg-nodm-patch` branch in
+`chiachunli08/openpilot`.
+
 The patch is for the owner's development machine and disables driver monitoring.
 It is a squashed patch that also disables the comma uploader and matches the
 current `navd`/`mapsd` `process_config.py` layout shared by all managed branches.
