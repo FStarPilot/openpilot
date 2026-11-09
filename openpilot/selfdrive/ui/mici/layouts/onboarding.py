@@ -1,4 +1,5 @@
 import math
+import time
 import numpy as np
 import pyray as rl
 from collections.abc import Callable
@@ -92,6 +93,9 @@ class DMBadFaceDetected(NavScroller):
 class TrainingGuideDMTutorial(NavWidget):
   PROGRESS_DURATION = 4
   LOOKING_THRESHOLD_DEG = 30.0
+  # SP-FORK (m3-nodm-sp): how long to wait for driverMonitoringState before
+  # treating driver monitoring as unavailable and letting the user continue.
+  DM_UNAVAILABLE_TIMEOUT = 5.0
 
   def __init__(self, continue_callback: Callable[[], None]):
     super().__init__()
@@ -108,6 +112,7 @@ class TrainingGuideDMTutorial(NavWidget):
     self._progress = FirstOrderFilter(0.0, 0.5, 1 / gui_app.target_fps)
     self._dialog = DriverCameraSetupDialog()
     self._bad_face_page = DMBadFaceDetected()
+    self._shown_at = time.monotonic()
 
     # Disable driver monitoring model when device times out for inactivity
     def inactivity_callback():
@@ -119,6 +124,17 @@ class TrainingGuideDMTutorial(NavWidget):
     super().show_event()
     self._dialog.show_event()
     self._progress.x = 0.0
+    self._shown_at = time.monotonic()
+
+  @staticmethod
+  def _driver_monitoring_disabled() -> bool:
+    # SP-FORK (m3-nodm-sp): dmonitoringd/dmonitoringmodeld are disabled in this
+    # fork, so driverMonitoringState is never published.
+    sm = ui_state.sm
+    if sm.recv_frame.get("managerState", 0) == 0:
+      return False
+    dm_procs = [p for p in sm["managerState"].processes if p.name in ("dmonitoringd", "dmonitoringmodeld")]
+    return bool(dm_procs) and not any(p.shouldBeRunning for p in dm_procs)
 
   def _update_state(self):
     super()._update_state()
@@ -127,6 +143,12 @@ class TrainingGuideDMTutorial(NavWidget):
 
     sm = ui_state.sm
     if sm.recv_frame.get("driverMonitoringState", 0) == 0:
+      # SP-FORK (m3-nodm-sp): without driver monitoring there is no face
+      # detection, so waiting for it would block onboarding forever. Keep the
+      # camera preview up for mounting, but let the user continue.
+      if time.monotonic() - self._shown_at > self.DM_UNAVAILABLE_TIMEOUT and self._driver_monitoring_disabled():
+        self._progress.x = 1.0
+        self._good_button.set_enabled(True)
       return
 
     dm_state = sm["driverMonitoringState"]
