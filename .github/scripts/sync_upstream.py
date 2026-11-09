@@ -9,13 +9,9 @@ import tempfile
 UPSTREAM = "https://github.com/sunnypilot/sunnypilot.git"
 TARGET = "https://github.com/FStarPilot/openpilot.git"
 PATCH_REPO = "https://github.com/chiachunli08/openpilot.git"
-DEFAULT_PATCH_COMMIT = "f08c7d88f847ec0878ed6ec524663784258ed32f"
-# The HKG prebuilt branch has navd/mapsd before dmonitoringmodeld, so the
-# default patch does not apply. This squashed commit carries the same nodm
-# changes (and the comma uploader disable) with the HKG process_config layout.
-PATCH_COMMITS = {
-  "hkg-angle-steering-2025-prebuilt": "f0bf8a375cabd2515bb332034749992e076acb7c",
-}
+# Squashed nodm patch with the navd/mapsd process_config layout. It also
+# disables the comma uploader, so the uploader check below is a no-op.
+PATCH_COMMIT = "f0bf8a375cabd2515bb332034749992e076acb7c"
 BRANCHES = {"dev-chestnut", "dev", "staging-chestnut", "staging", "hkg-angle-steering-2025-prebuilt"}
 UPLOADER_PROCESS_CONFIG = "openpilot/system/manager/process_config.py"
 COMMA_UPLOADER_ENABLED = '  PythonProcess("uploader", "openpilot.system.loggerd.uploader", uploader_ready),'
@@ -66,10 +62,6 @@ def remote_head(repo, branch, env):
   return result.stdout.split()[0]
 
 
-def patch_commit_for(branch, override=None):
-  return override or PATCH_COMMITS.get(branch, DEFAULT_PATCH_COMMIT)
-
-
 def disable_comma_uploader(directory):
   path = Path(directory) / UPLOADER_PROCESS_CONFIG
   contents = path.read_text()
@@ -84,10 +76,9 @@ def disable_comma_uploader(directory):
 
 
 def sync(branch, dry_run=False, *, upstream=UPSTREAM, target=TARGET,
-         patch_repo=PATCH_REPO, patch_commit=None):
+         patch_repo=PATCH_REPO, patch_commit=PATCH_COMMIT):
   if branch not in BRANCHES:
     raise ValueError(f"Unsupported synchronization branch: {branch}")
-  patch_commit = patch_commit_for(branch, patch_commit)
   env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_LFS_SKIP_SMUDGE": "1"}
   if token := env.get("GH_TOKEN"):
     auth = base64.b64encode(f"x-access-token:{token}".encode()).decode()
