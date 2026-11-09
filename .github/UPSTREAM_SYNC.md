@@ -1,8 +1,8 @@
 # Development branch synchronization
 
 `master` hosts the controller workflow. Every six hours it checks upstream
-`dev-chestnut`, `dev`, `staging-chestnut`, and `staging`, then rebuilds each matching
-fork branch in this order:
+`dev-chestnut`, `dev`, `staging-chestnut`, `staging`, and
+`hkg-angle-steering-2025-prebuilt`, then rebuilds each matching fork branch in this order:
 
 1. Start at the upstream tip.
 2. Cherry-pick the pinned driver-monitoring patch.
@@ -18,6 +18,16 @@ The workflow applies it exactly with `git cherry-pick -x`; it does not attempt
 automatic conflict resolution. If upstream already contains the changes, Git
 drops the empty cherry-pick. Successful text application is not a driving validation.
 
+`hkg-angle-steering-2025-prebuilt` has a different `process_config.py` layout
+(`navd`/`mapsd` precede `dmonitoringmodeld`), so it uses a separate squashed patch
+that also disables the comma uploader:
+
+https://github.com/chiachunli08/openpilot/commit/f0bf8a375cabd2515bb332034749992e076acb7c
+
+The per-branch patch is selected by `PATCH_COMMITS` in
+`.github/scripts/sync_upstream.py`. When the HKG branch changes its process list,
+that patch may need to be refreshed and `PATCH_COMMITS` updated.
+
 The comma uploader commit changes the `uploader` process in
 `openpilot/system/manager/process_config.py` to `enabled=False`. This disables only
 the comma uploader process; it does not disable loggerd, local log retention,
@@ -29,7 +39,7 @@ If upstream already has the exact disabled definition, no redundant commit is ad
 The schedule runs at 00:17, 06:17, 12:17, and 18:17 UTC (08:17, 14:17, 20:17, and
 02:17 in Taiwan). GitHub can delay scheduled runs during high load.
 
-The four destination branches are automation-managed. Each successful run replaces
+The five destination branches are automation-managed. Each successful run replaces
 the previous upstream-plus-patch history, including after upstream history rewrites.
 Keep additional manual work on other branches. Updates use an explicit
 `--force-with-lease` against the SHA read at the start, so concurrent changes fail
