@@ -5,36 +5,29 @@
 `hkg-angle-steering-2025-prebuilt`, then rebuilds each matching fork branch in this order:
 
 1. Start at the upstream tip.
-2. Cherry-pick the pinned driver-monitoring patch.
-3. Create a separate `system: disable comma uploader` commit.
+2. Cherry-pick the pinned nodm patch.
+3. Verify the comma uploader is disabled (the pinned patch already disables it).
 4. Remove the reviewed unused automation files in a cleanup commit when needed.
 
-The pinned driver-monitoring commit is:
+The pinned nodm commit is:
 
-https://github.com/chiachunli08/openpilot/commit/f08c7d88f847ec0878ed6ec524663784258ed32f
+https://github.com/chiachunli08/openpilot/commit/f0bf8a375cabd2515bb332034749992e076acb7c
 
 The patch is for the owner's development machine and disables driver monitoring.
+It is a squashed patch that also disables the comma uploader and matches the
+current `navd`/`mapsd` `process_config.py` layout shared by all managed branches.
 The workflow applies it exactly with `git cherry-pick -x`; it does not attempt
 automatic conflict resolution. If upstream already contains the changes, Git
 drops the empty cherry-pick. Successful text application is not a driving validation.
 
-`hkg-angle-steering-2025-prebuilt` has a different `process_config.py` layout
-(`navd`/`mapsd` precede `dmonitoringmodeld`), so it uses a separate squashed patch
-that also disables the comma uploader:
-
-https://github.com/chiachunli08/openpilot/commit/f0bf8a375cabd2515bb332034749992e076acb7c
-
-The per-branch patch is selected by `PATCH_COMMITS` in
-`.github/scripts/sync_upstream.py`. When the HKG branch changes its process list,
-that patch may need to be refreshed and `PATCH_COMMITS` updated.
-
-The comma uploader commit changes the `uploader` process in
-`openpilot/system/manager/process_config.py` to `enabled=False`. This disables only
-the comma uploader process; it does not disable loggerd, local log retention,
-sunnylink uploader, or other network services. The workflow requires the expected
-process definition to occur exactly once. If upstream changes that definition,
-synchronization fails before pushing instead of silently leaving the uploader on.
-If upstream already has the exact disabled definition, no redundant commit is added.
+The comma uploader check changes the `uploader` process in
+`openpilot/system/manager/process_config.py` to `enabled=False` when the pinned
+patch did not already do so. This disables only the comma uploader process; it
+does not disable loggerd, local log retention, sunnylink uploader, or other
+network services. The workflow requires the expected process definition to occur
+exactly once. If upstream changes that definition, synchronization fails before
+pushing instead of silently leaving the uploader on. If the exact disabled
+definition is already present, no redundant commit is added.
 
 The schedule runs at 00:17, 06:17, 12:17, and 18:17 UTC (08:17, 14:17, 20:17, and
 02:17 in Taiwan). GitHub can delay scheduled runs during high load.

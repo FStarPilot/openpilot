@@ -6,8 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from sync_upstream import (COMMA_UPLOADER_DISABLED, COMMA_UPLOADER_ENABLED,
-                           DEFAULT_PATCH_COMMIT, PATCH_COMMITS, UPLOADER_PROCESS_CONFIG,
-                           git, patch_commit_for, remote_head, sync)
+                           UPLOADER_PROCESS_CONFIG, git, remote_head, sync)
 
 
 class SyncTests(unittest.TestCase):
@@ -175,12 +174,6 @@ class SyncTests(unittest.TestCase):
   def test_master_is_rejected(self):
     with self.assertRaises(ValueError):
       sync('master')
-
-  def test_branch_specific_patch_selection(self):
-    hkg = 'hkg-angle-steering-2025-prebuilt'
-    self.assertEqual(DEFAULT_PATCH_COMMIT, patch_commit_for('dev'))
-    self.assertEqual(PATCH_COMMITS[hkg], patch_commit_for(hkg))
-    self.assertEqual(self.patch_sha, patch_commit_for(hkg, self.patch_sha))
 
 
 if __name__ == '__main__':
