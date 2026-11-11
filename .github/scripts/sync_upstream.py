@@ -10,9 +10,11 @@ UPSTREAM = "https://github.com/sunnypilot/sunnypilot.git"
 TARGET = "https://github.com/FStarPilot/openpilot.git"
 PATCH_REPO = "https://github.com/chiachunli08/openpilot.git"
 # Squashed nodm patch with the navd/mapsd process_config layout. It also
-# disables the comma uploader, so the uploader check below is a no-op.
+# disables the comma uploader, so the uploader check below is a no-op, and
+# fixes the comma 4 (mici) onboarding driver camera check so setup can finish
+# while driver monitoring is disabled.
 # The pin-hkg-nodm-patch branch in PATCH_REPO keeps this commit reachable.
-PATCH_COMMIT = "f0bf8a375cabd2515bb332034749992e076acb7c"
+PATCH_COMMIT = "50f1294bec29edfea5a6dde115499ec950129922"
 BRANCHES = {"dev-chestnut", "dev", "staging-chestnut", "staging", "hkg-angle-steering-2025-prebuilt"}
 UPLOADER_PROCESS_CONFIG = "openpilot/system/manager/process_config.py"
 COMMA_UPLOADER_ENABLED = '  PythonProcess("uploader", "openpilot.system.loggerd.uploader", uploader_ready),'
